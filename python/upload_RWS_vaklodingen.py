@@ -8,19 +8,19 @@ import time
 import pytz
 import argparse
 
-from osgeo import gdal
-
 import ee
 import ee.cli
 import ee.cli.commands
 import ee.cli.utils
 
-input_dir = '../data/vaklogindgen_asc/'
-output_dir = '../data/vaklogindgen_tif/'
+input_dir = '../data/vaklodingen_asc/'
+output_dir = '../data/vaklodingen_tif/'
 
 os.chdir(input_dir)
 
 files = glob.glob('./*.asc')
+
+print(files)
 
 local = pytz.timezone("Europe/Amsterdam")
 
@@ -52,7 +52,7 @@ def run(cmd):
     print(cmd)
     subprocess.call(cmd)
 
-start_index = 2564
+start_index = 0
 
 for i, f in enumerate(files[start_index:]):
     print('Processing file ' + f + ', file index: ' + str(i + start_index))
@@ -81,7 +81,7 @@ for i, f in enumerate(files[start_index:]):
     run("gdal_translate -ot Float32 -a_srs EPSG:28992 -co COMPRESS=DEFLATE -co PREDICTOR=2 -co ZLEVEL=6 -of GTiff {0} {1}".format(filename, filename_output))
 
     # copy to GCS 
-    run(r"D:\src\google-cloud-sdk\bin\gsutil.cmd cp {0} gs://hydro-earth/vaklodingen/{1}".format('../' + output_dir + '/{0}.tif'.format(filename_no_ext), filename_no_ext))
+    run(r"gsutil.cmd cp {0} gs://hydro-earth/vaklodingen/{1}".format('../' + output_dir + '/{0}.tif'.format(filename_no_ext), filename_no_ext))
 
     # upload to GEE
     retry_count = 0
