@@ -275,7 +275,7 @@ class Bathymetry(object):
         if filter:
             filter: ee.Filter = ee.Filter.And(filter, date_filter)
         else:
-            filter: ee.Filter = ee.Filter.date(date_filter)
+            filter: ee.Filter = date_filter
 
         options_get_images: Dict[str, Any] = {
             "missions": missions,
