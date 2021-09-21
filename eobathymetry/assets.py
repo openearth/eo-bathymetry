@@ -479,26 +479,6 @@ def addCdfQualityScore(
 
     return images
 
-# No need for assets class when you just want JavaScript API: import assets -> assets.<methodname>
-# class Assets:
-#     @staticmethod
-#     def getImages(g, options):
-#         return assets_getImages(g, options)
-
-#     @staticmethod
-#     def getMostlyCleanImages(images, g, options):
-#         return assets_getMostlyCleanImages(images, g, options)
-    
-#     @staticmethod
-#     def addCdfQualityScore(
-#         images,
-#         opt_thresholdMin=75,
-#         opt_thresholdMax=95,
-#         opt_includeNeighborhood=False,
-#         opt_neighborhoodOptions={"erosion": 5, "dilation": 50, "weight": 50}, opt_qualityBand="green"
-#     ):
-#         return assets_addCdfQualityScore(images, opt_thresholdMin, opt_thresholdMax, opt_includeNeighborhood, opt_neighborhoodOptions)
-
 
 # /***
 #  * The script computes surface water mask using Canny Edge detector and Otsu thresholding
