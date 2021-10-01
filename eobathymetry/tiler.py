@@ -1,5 +1,5 @@
 import math
-from typing import Dict, List, Tuple
+from typing import Optional, List, Tuple
 
 import ee
 
@@ -56,7 +56,7 @@ def get_tile_bounds(tx: int, ty: int, zoom: int) -> List[float]:
     max: float = pixels_to_meters((tx + 1) * TILE_SIZE, (ty + 1) * TILE_SIZE, zoom)
     return [min, max]
 
-def get_tiles_for_geometry(geometry: ee.Geometry, zoom: int, opt_bounds: ee.Geometry) -> ee.FeatureCollection:
+def get_tiles_for_geometry(geometry: ee.Geometry, zoom: int, opt_bounds: Optional[ee.Geometry] = None) -> ee.FeatureCollection:
     bounds: ee.Geometry = geometry
     if opt_bounds:
         bounds = opt_bounds
@@ -68,8 +68,8 @@ def get_tiles_for_geometry(geometry: ee.Geometry, zoom: int, opt_bounds: ee.Geom
     tmax = degrees_to_tiles(ur[0], ur[1], zoom)
 
     tiles: List = []
-    for tx in range(start=tmin[0], end=tmax[0]+1):
-        for ty in range(start=tmax[1], end=tmin[1]+1):
+    for tx in range(tmin[0], tmax[0]+1):
+        for ty in range(tmax[1], tmin[1]+1):
             temp_bounds: List[float] = get_tile_bounds(tx, ty, zoom)
             rect: ee.Geometry = ee.Geometry.Rectangle(temp_bounds, PROJECTION, False)
             tiles.append(ee.Feature(rect).set({"tx": tx, "ty": ty, "zoom": zoom}))
