@@ -55,8 +55,7 @@ class Bathymetry(object):
         self.raw_images = images
         images = images.map(self._remove_all_zero_images)
         # Always has a value?
-        if bounds_buffer:
-            bounds = bounds.buffer(bounds_buffer, bounds_buffer / 10)
+        bounds = bounds.buffer(bounds_buffer, ee.Number(bounds_buffer).divide(10))
 
         return self._compute_inverse_depth(
             images=images,
@@ -80,14 +79,14 @@ class Bathymetry(object):
             water_area: ee.Number = water.gt(0.01).multiply(ee.Image.pixelArea()).reduceRegion(
                 reducer=ee.Reducer.sum(),
                 geometry=bounds,
-                scale=scale * 5,
+                scale=ee.Number(scale).multiply(5),
                 tileScale=4
             ).values().get(0)
 
             land_area: ee.Number = water.lt(0).multiply(ee.Image.pixelArea()).reduceRegion(
                 reducer=ee.Reducer.sum(),
                 geometry=bounds,
-                scale=scale * 5,
+                scale=ee.Number(scale).multiply(5),
                 tileScale=4
             ).values().get(0)
 
@@ -172,7 +171,7 @@ class Bathymetry(object):
                 stat1 = stat1.reduceRegion(
                     reducer=ee.Reducer.percentile(range_percentiles_water),
                     geometry=bounds,
-                    scale=scale * 3,
+                    scale=ee.Number(scale).multiply(3),
                     maxPixels=1e10,
                 )
                 
@@ -183,14 +182,14 @@ class Bathymetry(object):
                 stat1mean = stat1.reduceRegion(
                     reducer=ee.Reducer.mean(),
                     geometry=bounds,
-                    scale=scale*3,
+                    scale=ee.Number(scale).multiply(3),
                     maxPixels=1e10
                 )
 
                 stat1sigma = stat1.reduceregion(  # not being used.
                     reducer=ee.Reducer.stDev(),
                     geometry=bounds,
-                    scale=scale*3,
+                    scale=ee.Number(scale).multiply(3),
                     maxPixels=1e10
                 )
 
@@ -207,7 +206,7 @@ class Bathymetry(object):
                 stat2 = stat2.reduceRegion(
                     reducer=ee.Reducer.percentile(range_percentiles_land),
                     geometry=bounds,
-                    scale=scale*3,
+                    scale=ee.Number(scale).multiply(3),
                     maxPixels=1e10
                 )
 
@@ -218,13 +217,13 @@ class Bathymetry(object):
                 stat2mean = stat2.reduceRegion(
                     reducer=ee.Reducer.mean(),
                     geometry=bounds,
-                    scale=scale*3,
+                    scale=ee.Number(scale).multiply(3),
                     maxPixels=1e10
                 )
                 stat2sigma = stat2.reduceRegion(  # not used?
                     reducer=ee.Reducer.stDev(),
                     geometry=bounds,
-                    scale=scale*3,
+                    scale=ee.Number(scale).multiply(3),
                     maxPixels=1e10
                 )
 
@@ -328,7 +327,7 @@ class Bathymetry(object):
                 weight: ee.Image = i.select("weight")
                 mask: ee.Image = i.select(0).mask()
 
-                mask = utils.focusMin(mask, 10) \
+                mask = utils.focalMin(mask, 10) \
                     .reproject(ee.Projection("EPSG:3857").atScale(scale)).resample("bicubic")
                 mask = utils.focalMaxWeight(mask.Not(), 10) \
                     .reproject(ee.Projection("EPSG:3857").atScale(scale)).resample("bicubic")
@@ -392,7 +391,7 @@ class Bathymetry(object):
             "filter": filter,
             "filterMasked": filter_masked,
             "filterMaskedFraction": filter_masked_fraction,
-            "scale": scale * 10,  # why *10?
+            "scale": ee.Number(scale).multiply(10),  # why *10?
             "resample": True
         }
 

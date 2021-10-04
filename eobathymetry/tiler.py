@@ -24,7 +24,7 @@ def pixels_to_meters(px: float, py: float, zoom: int) -> List[float]:
 
     return [x, y]
 
-def meters_to_pixels(x: float, y: float, zoom) -> Tuple[float]:
+def meters_to_pixels(x: float, y: float, zoom: int) -> Tuple[float]:
     resolution: float = zoom_to_scale(zoom)
     px: float = (x + ORIGIN) / resolution
     py: float = (x + ORIGIN) / resolution
@@ -61,6 +61,7 @@ def get_tiles_for_geometry(geometry: ee.Geometry, zoom: int, opt_bounds: Optiona
     if opt_bounds:
         bounds = opt_bounds
     bounds_list: ee.List = ee.List(bounds.bounds().coordinates().get(0))
+
     ll: List[float] = bounds_list.get(0).getInfo() # TODO: port to server-side
     ur: List[float] = bounds_list.get(2).getInfo()
 

@@ -288,13 +288,13 @@ def getImages(g, options):
             area = g.area(scale)
 
             def f(i):
-                maskedArea = ee.Image.pixelArea().updateMask(i.select(0).mask()).reduceRegion(ee.Reducer.sum(), g, scale * 10).values().get(0)
+                maskedArea = ee.Image.pixelArea().updateMask(i.select(0).mask()).reduceRegion(ee.Reducer.sum(), g, ee.Number(scale).multiply(10)).values().get(0)
                 return i.set({'maskedFraction': ee.Number(maskedArea).divide(area)}) 
 
             images = images.map(f).filter(ee.Filter.gt('maskedFraction', options['filterMaskedFraction']))
         else:
             #    get images covering bounds 100% 
-            images = images.map(lambda i: i.set({'complete': i.select(0).mask().reduceRegion(ee.Reducer.allNonZero(), g, scale * 10).values().get(0)})).filter(ee.Filter.eq('complete', 1))
+            images = images.map(lambda i: i.set({'complete': i.select(0).mask().reduceRegion(ee.Reducer.allNonZero(), g, ee.Number(scale).multiply(10)).values().get(0)})).filter(ee.Filter.eq('complete', 1))
 
     # exclude night images
     images = images.filter(ee.Filter.gt('SUN_ELEVATION', 0))
@@ -383,7 +383,7 @@ def getMostlyCleanImages(images, g, options):
     
     cloudFrequency = (modisClouds.divide(10000).reduceRegion(
         ee.Reducer.percentile([p]), 
-        g.buffer(10000, scale*10), scale*10).values().get(0))
+        g.buffer(10000, ee.Number(scale).multiply(10)), ee.Number(scale).multiply(10)).values().get(0))
         
     # print('Cloud frequency (over AOI):', cloudFrequency)
     
