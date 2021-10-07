@@ -54,7 +54,7 @@ class Bathymetry(object):
         # save loaded images in class as raw_images
         self.raw_images = images
         images = images.map(self._remove_all_zero_images)
-        # Always has a value?
+
         bounds = bounds.buffer(bounds_buffer, ee.Number(bounds_buffer).divide(10))
 
         return self._compute_inverse_depth(
@@ -74,7 +74,8 @@ class Bathymetry(object):
             water: ee.Image = image.normalizedDifference(['green', 'nir']).rename('water').unitScale(0, 0.1)
             
             if pansharpen:
-                image = pansharpen(image)
+                # TODO: Not implemented
+                image = assets.pansharpen(image)
 
             water_area: ee.Number = water.gt(0.01).multiply(ee.Image.pixelArea()).reduceRegion(
                 reducer=ee.Reducer.sum(),
