@@ -11,7 +11,8 @@ RUN pip install -r requirements.txt --no-cache-dir \
     jupyter-matplotlib@0.10.0 \
  && rm requirements.txt
 
-RUN echo "c.NotebookApp.iopub_data_rate_limit = 10000000" >> /home/jovyan/.jupyter/jupyter_notebook_config.py
-RUN echo "c.NotebookApp.iopub_msg_rate_limit = 100000" >> /home/jovyan/.jupyter/jupyter_notebook_config.py
+RUN echo "c.NotebookApp.iopub_data_rate_limit = 10000000" >> /home/jovyan/.jupyter/jupyter_notebook_config.py \
+ && echo "c.NotebookApp.iopub_msg_rate_limit = 100000" >> /home/jovyan/.jupyter/jupyter_notebook_config.py \
+ && mkdir -m 777 /home/jovyan/.config
 
 USER ${NB_UID}
