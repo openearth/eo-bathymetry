@@ -4,3 +4,4 @@ privatekey*
 **/__pycache__/*
 .python-version
 **/output/*
+**/out_thumb/*
