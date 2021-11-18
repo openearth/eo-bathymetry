@@ -3,3 +3,5 @@ privatekey*
 **/.ipynb_checkpoints/*
 **/__pycache__/*
 .python-version
+**/output/*
+**/out_thumb/*
