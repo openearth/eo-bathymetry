@@ -1,0 +1,15 @@
+name: geo-env
+channels:
+    - conda-forge
+dependencies:
+    - gdal
+    - netcdf4
+    - pip
+    - pip:
+      - bs4
+      - dacite==1.6.0
+      - eepackages
+      - geemap
+      - ipykernel
+      - pathos
+      - tqdm
