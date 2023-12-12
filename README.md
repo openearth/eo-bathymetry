@@ -5,4 +5,4 @@ Build the jupyter notebook docker image:
 Then run the notebook and attach this repository as a volume. Run expose the notebook server on port 8888 on your local machine:
 ```docker run -p 8888:8888 -v $(pwd):/home/jovyan/work/ eo-bathymetry ```
 If you want to run with local gcloud credentials, run with:
-```docker run -p 8888:8888 -v $(pwd):/home/jovyan/work/ -v ~/.config/gcloud:/home/jovyan/.config/gcloud eo-bathymetry```
+```docker run -p 8888:8888 -v $(pwd):/home/jovyan/work/ -v ~/.config:/home/jovyan/.config eo-bathymetry```
