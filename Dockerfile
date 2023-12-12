@@ -12,6 +12,9 @@ RUN apt-get update -y \
 
 # create a new mamba environment following:
 # https://jupyter-docker-stacks.readthedocs.io/en/latest/using/recipes.html#add-a-custom-conda-environment-and-jupyter-kernel
+
+ARG env_name=geo-env
+
 COPY --chown=${NB_UID}:${NB_GID} environment.yaml /tmp/
 
 # create mamba environment
