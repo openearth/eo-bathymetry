@@ -1,4 +1,4 @@
-FROM jupyter/minimal-notebook:lab-3.1.17
+FROM quay.io/jupyter/minimal-notebook:lab-4.0.9
 
 USER root
 
@@ -10,22 +10,24 @@ RUN apt-get update -y \
  && apt-get update -y \
  && apt-get install google-cloud-cli -y
 
-COPY ./environment.yaml ${HOME}/environment.yaml
+# create a new mamba environment following:
+# https://jupyter-docker-stacks.readthedocs.io/en/latest/using/recipes.html#add-a-custom-conda-environment-and-jupyter-kernel
+COPY --chown=${NB_UID}:${NB_GID} environment.yaml /tmp/
 
 # create mamba environment
-RUN mamba env create -f environment.yaml
+RUN mamba env create -p "${CONDA_DIR}/envs/${env_name}" -f /tmp/environment.yaml && \
+    mamba clean --all -f -y
 
-# install jupyter labextensions and install geo-env
-RUN mamba run -n geo-env jupyter labextension install \
-    jupyterlab-system-monitor@0.7.0 \
-    jupyterlab-topbar-extension@0.6.0 \
-    jupyter-matplotlib@0.10.0 \
- && mamba clean -qafy \
- && rm environment.yaml \
- && mamba run -n geo-env python -m ipykernel install --name=geo-env
+RUN "${CONDA_DIR}/envs/${env_name}/bin/python" -m ipykernel install --user --name="${env_name}" && \
+    fix-permissions "${CONDA_DIR}" && \
+    fix-permissions "/home/${NB_USER}"
 
-RUN echo "c.NotebookApp.iopub_data_rate_limit = 10000000" >> /home/jovyan/.jupyter/jupyter_notebook_config.py \
- && echo "c.NotebookApp.iopub_msg_rate_limit = 100000" >> /home/jovyan/.jupyter/jupyter_notebook_config.py \
- && mkdir -m 777 /home/jovyan/.config
+RUN \
+    # This changes a startup hook, which will activate the custom environment for the process
+    echo conda activate "${env_name}" >> /usr/local/bin/before-notebook.d/10activate-conda-env.sh && \
+    # This makes the custom environment default in Jupyter Terminals for all users which might be created later
+    echo conda activate "${env_name}" >> /etc/skel/.bashrc && \
+    # This makes the custom environment default in Jupyter Terminals for already existing NB_USER
+    echo conda activate "${env_name}" >> "/home/${NB_USER}/.bashrc"
 
 USER ${NB_UID}
