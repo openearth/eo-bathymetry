@@ -1,39 +1,80 @@
 # %%
 # Packages
+import contextily as ctx
 import ee
 import geemap
 import matplotlib.pyplot as plt
 import numpy as np
+import os
+from shapely.geometry import shape
 import time
 import xarray as xr
 ee.Initialize()
 
 # %%
+# Plot map extents
+fig, ax = plt.subplots(1, 1, figsize=(10, 10))
+cmap = plt.cm.get_cmap('Spectral')
+colors = cmap(np.linspace(0, 1, 15))
+
+for i in range(0, 15):
+    file_path_map_nc = r'p:\1230882-emodnet_hrsm\GTSMv3.0EMODnet\CMEMS_intertidal_SDB\r001\output\gtsm_model_{:04}_map.nc'.format(i)
+    print(os.path.basename(file_path_map_nc))
+    map = xr.open_dataset(file_path_map_nc)
+    lons = map.mesh2d_face_x.values
+    lats = map.mesh2d_face_y.values
+    ax.scatter(lons, lats, color=colors[i], alpha=0.5, label='Map {:04}'.format(i))
+ax.legend(loc='right', bbox_to_anchor=(1.2, 0.5))
+ax.set_xlim([-180, 180])
+ax.set_ylim([-90, 90])
+ctx.add_basemap(ax, crs='EPSG:4326', source=ctx.providers.OpenStreetMap.Mapnik, zoom=1)
+
+# %%
 # File paths
 file_path_his_nc = r'p:\1230882-emodnet_hrsm\GTSMv3.0EMODnet\CMEMS_intertidal_SDB\r001\output\gtsm_model_0000_his.nc'
-file_path_map_nc = r'p:\1230882-emodnet_hrsm\GTSMv3.0EMODnet\CMEMS_intertidal_SDB\r001\output\gtsm_model_0000_map.nc'
+file_path_map_nc = r'p:\1230882-emodnet_hrsm\GTSMv3.0EMODnet\CMEMS_intertidal_SDB\r001\output\gtsm_model_0014_map.nc'
 
 # Bounds North Sea
-lon_bounds = [2, 4]
-lat_bounds = [51, 53]
+lon_bounds = [1.5, 4.5]
+lat_bounds = [51, 54]
 time_bounds = ['2021-06-01', '2021-07-01']
 time_bounds = [np.datetime64(time_bounds[0]), np.datetime64(time_bounds[1])]
 
 # %%
-# Open file
+# Open files
 t0 = time.time()
 his = xr.open_dataset(file_path_his_nc)
-print('{} s to open file'.format(np.round(time.time()-t0, 2)))
+print('{} s to open his file'.format(np.round(time.time()-t0, 2)))
+
+t0 = time.time()
+map = xr.open_dataset(file_path_map_nc)
+print('{} s to open map file'.format(np.round(time.time()-t0, 2)))
 
 # %%
+# Get variable names
+his_vars = list(his.variables)
+map_vars = list(map.variables)
+'''
+print('his variables: {}'.format(his_vars))
+print('map variables: {}'.format(map_vars))
+'''
+# Get coordinates
+his_coords = list(his.coords)
+map_coords = list(map.coords)
+'''
+print('his coordinates: {}'.format(his_coords))
+print('map coordinates: {}'.format(map_coords))
+'''
+
+# %%
+# Get data from file
 # Get longitude, latitude, time and water levels
 t0 = time.time()
 lons = his.station_x_coordinate.values
 lats = his.station_y_coordinate.values
 times = his.time.values
-waterlevels = his.waterlevel.values
+#waterlevels = his.waterlevel.values
 
-# %%
 # Get station and time indices
 station_idxs = np.where((lats >= lat_bounds[0]) & (lats <= lat_bounds[1]) & (lons >= lon_bounds[0]) & (lons <= lon_bounds[1]))[0]
 time_idxs = np.where((times >= time_bounds[0]) & (times <= time_bounds[1]))[0]
@@ -43,14 +84,23 @@ lats = lats[station_idxs]
 lons = lons[station_idxs]
 times = times[time_idxs]
 waterlevels = his.waterlevel.isel(stations=station_idxs, time=time_idxs).values
-waterlevels = np.where(np.isnan(waterlevels), 0, waterlevels)
 
-print('{} s to get longitude, latitude, time and water levels'.format(np.round(time.time()-t0, 2)))
+# Remove poitns where water level is nan
+no_nan_idxs = np.where(~np.isnan(waterlevels).all(axis=0))[0]
+station_idxs = station_idxs[no_nan_idxs]
+lats = lats[no_nan_idxs]
+lons = lons[no_nan_idxs]
+waterlevels = waterlevels[:, no_nan_idxs]
+
+print('{} s to get data from file'.format(np.round(time.time()-t0, 2)))
+'''
 print('Length stations:   {}'.format(len(station_idxs)))
 print('Length of times:   {}'.format(len(time_idxs)))
 print('Shape waterlevels: {}'.format(waterlevels.shape))
+'''
 
 # %%
+# Get earth engine image collection and arrays
 # Create image collection
 t0 = time.time()
 col = ee.ImageCollection('COPERNICUS/S2_HARMONIZED')
@@ -59,25 +109,23 @@ col = ee.ImageCollection('COPERNICUS/S2_HARMONIZED')
 col = col.filterDate(time_bounds[0].astype(str), time_bounds[1].astype(str))
 col = col.filterBounds(ee.Geometry.Rectangle(lon_bounds[0], lat_bounds[0], lon_bounds[1], lat_bounds[1]))
 
-# Get first image
-image_idx = 10
-image = ee.Image(col.toList(col.size()).get(image_idx))
-
-# Convert latitude, longitude and time to earth engine arrays
+# Convert latitudes, longitudes, times and water levels to earth engine objects
 ee_lats = ee.List(lats.tolist())
 ee_lons = ee.List(lons.tolist())
 ee_times = ee.List([np.datetime_as_string(time) for time in times]).map(lambda time: ee.Date(time))
 ee_waterlevels = ee.Array(ee.List(waterlevels.tolist()))
 
 print('{} s to create image collection'.format(np.round(time.time()-t0, 2)))
+'''
 print('Length images:     {}'.format(col.size().getInfo()))
 print('Shape lats:        {}'.format(np.array(ee_lats.getInfo()).shape))
 print('Shape lons:        {}'.format(np.array(ee_lons.getInfo()).shape))
-print('Sahpe times:       {}'.format(np.array(ee_times.getInfo()).shape))
+print('Shape times:       {}'.format(np.array(ee_times.getInfo()).shape))
 print('Shape waterlevels: {}'.format(np.array(ee_waterlevels.getInfo()).shape))
+'''
 
 # %%
-# Add water level to image
+# Add water level to images
 def add_waterlevel_to_image(image, lats, lons, times, waterlevels):
     # Get latitude and longitude of the image
     image_centroid = ee.Geometry.centroid(image.geometry())
@@ -123,86 +171,157 @@ def add_waterlevel_to_image(image, lats, lons, times, waterlevels):
     # Return image
     return image
 
-# Add water levels to image
-t0 = time.time()
-image = add_waterlevel_to_image(image, ee_lats, ee_lons, ee_times, ee_waterlevels)
-print('{} s to add water levels to image'.format(np.round(time.time()-t0, 2)))
-
-# Get image properties
-image_properties = image.getInfo()['properties']
-print('image_lat:          {}'.format(image_properties['image_lat']))
-print('image_lon:          {}'.format(image_properties['image_lon']))
-print('image_time:         {}'.format(np.datetime64(image_properties['image_time'], 'ms')))
-print('station_idx:        {}'.format(image_properties['station_idx']))
-print('station_time_idx:   {}'.format(image_properties['station_time_idx']))
-print('station_lat:        {}'.format(image_properties['station_lat']))
-print('station_lon:        {}'.format(image_properties['station_lon']))
-print('station_time:       {}'.format(np.datetime64(image_properties['station_time'], 'ms')))
-print('station_waterlevel: {}'.format(image_properties['station_waterlevel']))
-
-# Get image geometry
-image_geometry = image.geometry().getInfo()
-image_coords = {'x': [coord[0] for coord in image_geometry['coordinates'][0]],
-                'y': [coord[1] for coord in image_geometry['coordinates'][0]]}
-
-# %%
-# Plot stations and image
-fig, axs = plt.subplots(2, 1, figsize=(10, 10))
-p = axs[0].tripcolor(lons, lats, waterlevels[image_properties['station_time_idx'], :], cmap='Spectral')
-fig.colorbar(p, ax=axs[0], label='Water level at image time [m]')
-axs[0].scatter(lons, lats, c='k', s=1, label='Stations')
-axs[0].plot(image_coords['x'], image_coords['y'], 'b', label='Image')
-axs[0].scatter(image_properties['image_lon'], image_properties['image_lat'], c='b', s=10, label='Image centroid')
-axs[0].scatter(image_properties['station_lon'], image_properties['station_lat'], c='r', s=10, label='Nearest station')
-axs[0].set_xlim(lon_bounds)
-axs[0].set_ylim(lat_bounds)
-axs[0].set_aspect('equal')
-axs[0].grid()
-axs[0].set_xlabel('Longitude')
-axs[0].set_ylabel('Latitude')
-axs[0].legend()
-
-axs[1].plot(times, waterlevels[:, image_properties['station_idx']], 'r')
-axs[1].plot(np.datetime64(image_properties['station_time'], 'ms'), image_properties['station_waterlevel'], 'bo', label='Image time')
-axs[1].set_xlim([times[0], times[-1]])
-axs[1].set_ylim([np.nanmin(waterlevels), np.nanmax(waterlevels)])
-axs[1].grid()
-axs[1].set_xlabel('Time')
-axs[1].set_ylabel('Water level at nearest station [m]')
-axs[1].legend()
-plt.show()
-
-# %%
-# Interactive map
-# Create map
-map = geemap.Map()
-
-# Center map
-map.setCenter(image_properties['image_lon'], image_properties['image_lat'], 10)
-
-# Add image
-map.addLayer(image, {'bands': ['B4', 'B3', 'B2'], 'min': 0, 'max': 2000}, 'image')
-
-# Add stations
-stations = ee.FeatureCollection([ee.Geometry.Point([lon, lat]) for lon, lat in zip(lons, lats)])
-map.addLayer(stations, {'color': 'black'}, 'stations')
-
-# Add nearest station
-nearest_station = ee.FeatureCollection([ee.Geometry.Point([image_properties['station_lon'], image_properties['station_lat']])])
-map.addLayer(nearest_station, {'color': 'red'}, 'nearest station')
-
-# Add image centroid
-image_centroid = ee.FeatureCollection([ee.Geometry.Point([image_properties['image_lon'], image_properties['image_lat']])])
-map.addLayer(image_centroid, {'color': 'blue'}, 'image centroid')
-
-# Display map
-map
-
-# %%
-# Add water levels to all images
+# Add water levels to images
 col_size = col.size().getInfo()
 t0 = time.time()
 col2 = col.map(lambda image: add_waterlevel_to_image(image, ee_lats, ee_lons, ee_times, ee_waterlevels))
 print('{} s to add water levels to {} images'.format(np.round(time.time()-t0, 2), col_size))
+
+# %%
+# Get features from images
+def get_feature_from_image(image):
+    feature = ee.Feature(ee.Geometry(image.geometry()),
+                         {'image_lat': image.get('image_lat'),
+                          'image_lon': image.get('image_lon'),
+                          'image_time': image.get('image_time'),
+                          'station_idx': image.get('station_idx'),
+                          'station_time_idx': image.get('station_time_idx'),
+                          'station_lat': image.get('station_lat'),
+                          'station_lon': image.get('station_lon'),
+                          'station_time': image.get('station_time'),
+                          'station_waterlevel': image.get('station_waterlevel')})	
+    return feature
+
+def get_features_from_image_collection(col):
+    # Get features from image collection
+    features = col.map(get_feature_from_image).getInfo()['features']
+
+    # Convert json geometries of the features to shapely geometries
+    for i, feature in enumerate(features):
+        features[i]['geometry'] = shape(feature['geometry'])
+    
+    # Convert ms times to numpy datetime64
+    for feature in features:
+        feature['properties']['image_time'] = np.datetime64(feature['properties']['image_time'], 'ms')
+        feature['properties']['station_time'] = np.datetime64(feature['properties']['station_time'], 'ms')
+    
+    return features
+
+t0 = time.time()
+features = get_features_from_image_collection(col2)
+t1 = time.time()
+print('{} s to get {} features'.format(np.round(t1-t0, 2), len(features)))
+
+# %%
+# Plot on interactive map
+def plot_interactive_map(image_idx):
+    # Get feature geometry and properties
+    geometry = features[image_idx]['geometry']
+    properties = features[image_idx]['properties']
+
+    # Get image
+    image = ee.Image(col2.toList(col2.size()).get(image_idx))
+
+    # Interactive map
+    # Create map
+    map = geemap.Map()
+
+    # Center map
+    map.setCenter(properties['image_lon'], properties['image_lat'], 10)
+
+    # Add image
+    map.addLayer(image, {'bands': ['B4', 'B3', 'B2'], 'min': 0, 'max': 2000}, 'image')
+
+    # Add stations
+    stations = ee.FeatureCollection([ee.Geometry.Point([lon, lat]) for lon, lat in zip(lons, lats)])
+    map.addLayer(stations, {'color': 'black'}, 'stations')
+
+    # Add image centroid
+    image_centroid = ee.FeatureCollection([ee.Geometry.Point([properties['image_lon'], properties['image_lat']])])
+    map.addLayer(image_centroid, {'color': 'red', 'markerType': 'cross'}, 'image centroid')
+
+    # Add nearest station
+    nearest_station = ee.FeatureCollection([ee.Geometry.Point([properties['station_lon'], properties['station_lat']])])
+    map.addLayer(nearest_station, {'color': 'blue', 'markerType': 'cross'}, 'nearest station')
+
+    # Display map
+    map
+
+# Plot on interactive map
+plot_interactive_map(image_idx=1)
+
+# %%
+# Plot on static map with time series
+def plot_static_map(image_idx):
+    # Get feature geometry and properties
+    geometry = features[image_idx]['geometry']
+    properties = features[image_idx]['properties']
+
+    # Create figure and axis
+    gridspec_kwargs = {'height_ratios': [1, 0.5]}
+    fig, axs = plt.subplots(2, 1, figsize=(10, 10), gridspec_kw=gridspec_kwargs)
+
+    # Plot map
+    # Plot stations
+    axs[0].tripcolor(lons, lats, waterlevels[properties['station_time_idx'], :],
+                    cmap='Spectral', edgecolors='none', alpha=0.25, vmin=-2.5, vmax=2.5)
+    p = axs[0].scatter(lons, lats, c=waterlevels[properties['station_time_idx'], :],
+                    cmap='Spectral', s=20, vmin=-2.5, vmax=2.5, label='Stations')
+    plt.colorbar(p, ax=axs[0], label='Water level at image time [m]')
+
+    # Plot features
+    axs[0].add_patch(plt.Polygon(geometry.exterior.coords, color='grey',
+                                alpha=0.25, linewidth=1.5, label='Image extent'))
+                    
+    axs[0].plot(properties['image_lon'], properties['image_lat'],
+                linestyle='none', marker='o', color='grey', label='Image centroid')
+    axs[0].plot(properties['station_lon'], properties['station_lat'],
+                linestyle='none', marker='o', markerfacecolor='none', color='black', label='Nearest station')
+
+    # Set axis properties
+    axs[0].set_xlim(lon_bounds)
+    axs[0].set_ylim(lat_bounds)
+    axs[0].set_aspect('equal')
+    axs[0].grid()
+    axs[0].set_xlabel('Longitude [deg]')
+    axs[0].set_ylabel('Latitude [deg]')
+    axs[0].legend(loc='upper right', framealpha=0.5)
+
+    # Add basemap
+    ctx.add_basemap(axs[0], crs='EPSG:4326', source=ctx.providers.OpenStreetMap.Mapnik, zoom=8)
+
+    # Plot time series
+    axs[1].plot(times, waterlevels[:, properties['station_idx']],
+                linestyle='-', color='r', label='Water level at nearest station')
+    axs[1].plot(properties['image_time'], properties['station_waterlevel'],
+                linestyle='none', marker='o', color='grey', label='Image time')
+    axs[1].plot(properties['station_time'], properties['station_waterlevel'],
+                linestyle='none', marker='o', markerfacecolor='none', color='black', label='Station time')
+
+    # Set axis properties
+    #axs[1].set_xlim([times[0], times[-1]])
+    axs[1].set_xlim(properties['image_time'].astype('datetime64[D]') - np.timedelta64(1, 'D'), properties['image_time'].astype('datetime64[D]') + np.timedelta64(1, 'D'))
+    axs[1].set_ylim(-2.5, 2.5)
+    axs[1].grid()
+    axs[1].set_xlabel('Time')
+    axs[1].set_ylabel('Water level at nearest station [m]')
+    axs[1].legend(loc='upper right', framealpha=0.5)
+
+# Plot on static map with time series
+for image_idx in range(0, len(features), 1):
+    plot_static_map(image_idx)
+    plt.show()
+
+# %%
+# Test map dataset
+t0 = time.time()
+lons2 = map.mesh2d_face_x.values
+lats2 = map.mesh2d_face_y.values
+times2 = map.time.values
+waterlevels2 = map.waterdepth.values
+
+print('{} s to get data from file'.format(np.round(time.time()-t0, 2)))
+print('Length stations:   {}'.format(len(lons2)))
+print('Shape waterlevels: {}'.format(waterlevels2.shape))
 
 # %%
