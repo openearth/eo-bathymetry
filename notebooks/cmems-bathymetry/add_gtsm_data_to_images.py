@@ -28,7 +28,7 @@ print('{} s to create image collection'.format(np.round(time.time()-t0, 2)))
 
 # Get gtsm feature collection
 t0 = time.time()
-gtsm_col = ee.FeatureCollection('users/rubenwhitenl/gtsm_waterlevels')
+gtsm_col = ee.FeatureCollection('projects/bathymetry/assets/gtsm_waterlevels')
 print('{} s to get gtsm feature collection'.format(np.round(time.time()-t0, 2)))
 
 # Get size of images and gtsm features

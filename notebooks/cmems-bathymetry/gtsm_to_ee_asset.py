@@ -114,10 +114,16 @@ Manually upload the csv files to the Google Cloud Bucket.
 # %%
 # Transfer csv file from Google Cloud Bucket to a Google Earth Engine Asset
 google_cloud_bucket_file_path = 'gs://cmems-sdb/gtsm/gtsm_waterlevels.csv'
-asset_id = 'users/rubenwhitenl/gtsm_waterlevels'
+#asset_id = 'users/rubenwhitenl/gtsm_waterlevels'
+asset_id = 'projects/bathymetry/assets/gtsm_waterlevels'
 command = 'earthengine upload table --asset_id={} {}'.format(asset_id, google_cloud_bucket_file_path)
 out = os.system(command)
-if out == 0: print('Task submitted successfully')
+
+# Check if the task was successful
+if out == 0:
+    print('Task submitted successfully');
+else:
+    print('Task failed');
 
 # %%
 # Get the Google Earth Engine Asset
@@ -125,7 +131,8 @@ import ee
 ee.Initialize()
 
 print('Getting the Google Earth Engine Asset')
-gtsm_wls = ee.FeatureCollection('users/rubenwhitenl/gtsm_waterlevels')
+#gtsm_wls = ee.FeatureCollection('users/rubenwhitenl/gtsm_waterlevels')
+gtsm_wls = ee.FeatureCollection('projects/bathymetry/assets/gtsm_waterlevels')
 gtsm_wls2 = gtsm_wls.filterDate('2021-01-01', '2021-01-02')
 gtsm_wls3 = gtsm_wls2.filterBounds(ee.Geometry.Rectangle(23, 25, 33, 35))
 
