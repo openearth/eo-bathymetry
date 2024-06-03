@@ -2,7 +2,7 @@
 # Notes
 '''
 Google Earth Engine accepts the following types: tif, shp and csv
-- Tif files are used for raster data, and cannot be created row by row, strucutred
+- Tif files are used for raster data, and cannot be created row by row, structured
 - Shp files have a maximum size of 2GB, and cannot be created row by row
 - Csv files can be created row by row, and can be used for vector data <--
 '''
@@ -15,6 +15,7 @@ import time
 import xarray as xr
 from tqdm import tqdm
 import geopandas as gpd
+from shapely.geometry import Point
 
 import ee
 ee.Initialize()
@@ -22,7 +23,7 @@ ee.Initialize()
 # %%
 # File paths
 file_path_his_nc = r'p:\1230882-emodnet_hrsm\GTSMv3.0EMODnet\CMEMS_intertidal_SDB\r001\output\gtsm_model_0000_his.nc'
-dir_path_out = r'p:\11209821-cmems-global-sdb\01_intertidal\02_data\02_gtsm_csv_files'
+dir_path_out = r'p:\11209821-cmems-global-sdb\01_intertidal\02_data\02_gtsm_files'
 
 # %%
 # Open files
@@ -46,6 +47,17 @@ int_times = np.array([time.astype('datetime64[ms]').astype('int64') for time in 
 # Get start and end times
 stime = times[0]
 etime = times[-1]
+
+# %%
+# Export stations as geojson
+# Create points
+points = [Point(lon, lat) for lon, lat in zip(lons, lats)]
+
+# Create geodataframe
+gdf_stations = gpd.GeoDataFrame(geometry=points, crs='EPSG:4326')
+
+# Export to geojson
+gdf_stations.to_file(os.path.join(dir_path_out, 'gtsm_stations.geojson'), driver='GeoJSON')
 
 # %%
 # Write data to csv
@@ -142,3 +154,21 @@ print('Length of gtsm_wls2: {}'.format(gtsm_wls2.size().getInfo()))
 print('Length of gtsm_wls3: {}'.format(gtsm_wls3.size().getInfo()))
 
 # %%
+# Calculate the highest and lowest astronomical tides per station
+min_tides = np.ones(station_idxs.shape)*np.nan
+max_tides = np.ones(station_idxs.shape)*np.nan
+
+for station_idx in tqdm(station_idxs):
+    # Determine the non-nan time indices based on the Waterlevel variable
+    time_idxs = np.where(~np.isnan(his.isel(stations=station_idx)['waterlevel'].values))[0]
+
+    # Get the waterlevels for the station
+    waterlevels = his.isel(stations=station_idx, time=time_idxs)['waterlevel'].values
+
+    # Get the minimum and maximum waterlevels
+    min_tides[station_idx] = np.min(waterlevels)
+    max_tides[station_idx] = np.max(waterlevels)
+
+# %%
+
+
