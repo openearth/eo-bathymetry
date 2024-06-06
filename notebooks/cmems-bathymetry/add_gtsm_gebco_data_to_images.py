@@ -22,20 +22,17 @@ gdf_aoi = gdf.read_file(aoi_file_path)
 aoi = ee.Geometry.Polygon(gdf_aoi.geometry[0].geoms[0].__geo_interface__['coordinates'])   
 
 # Period of interest
-poi = ['2021-01-01', '2022-01-01']
+poi = ['2021-01-01', '2021-01-15']
 
 # Zoom level
-zoom = 10
+zoom = 11
 
 # Get tiles
 tiles = tiler.get_tiles_for_geometry(aoi, zoom)
-tiles = tiles.toList(tiles.size())
 print('Number of tiles: {}'.format(tiles.size().getInfo()))
 
-# %%
 # Select tile
-tile_idx = 37
-tile = ee.Feature(tiles.get(tile_idx))
+tile = ee.Feature(tiles.filterMetadata("tx", "equals", "1065.0").filterMetadata("ty", "equals", "660.0").first())
 
 # %%
 # Plot tiles
@@ -73,7 +70,7 @@ gebco_image = ee.Image('projects/bathymetry/assets/gebco_2023_hat_lat')
 print('{} s to get gebco image'.format(np.round(time.time()-t0, 2)))
 
 # Get size of images and gtsm features
-#print('Number of images: {}'.format(image_col.size().getInfo()))
+print('Number of images: {}'.format(image_col.size().getInfo()))
 
 # %%
 # Add gtsm and gebco data to images
@@ -94,6 +91,7 @@ def add_gtsm_gebco_data_to_images(image, gtsm_col, gebco_image, tile=ee.Feature(
     :param max_temporal_offset: Maximum temporal offset in minutes
     :type max_temporal_offset: float (default=10)
     '''
+    
     # If tile geometry is not provided, set tile geometry to image geometry
     tile = ee.Feature(ee.Algorithms.If(ee.Algorithms.IsEqual(tile.geometry(), None),
                                        ee.Feature(image.geometry()),
@@ -142,31 +140,43 @@ def add_gtsm_gebco_data_to_images(image, gtsm_col, gebco_image, tile=ee.Feature(
     # Check if gtsm feature collection is empty
     bool_empty = gtsm_col.size().eq(0)
 
-    # Get station centroid
-    station_centroid = ee.Geometry(ee.Algorithms.If(bool_empty,
-                                                    ee.Geometry.Point(0, 0),
-                                                    gtsm_col.first().geometry()))
+    # Get gtsm feature
+    gtsm_feature = ee.Feature(ee.Algorithms.If(bool_empty,
+                                               ee.Feature(None),
+                                               gtsm_col.first()))
+
+    # Get station buffer
     station_buffer = ee.Geometry(ee.Algorithms.If(bool_empty,
                                                   ee.Geometry.Point(0, 0).buffer(max_spatial_offset*1000),
-                                                  gtsm_col.first().geometry())).buffer(max_spatial_offset*1000)
+                                                  gtsm_feature.geometry())).buffer(max_spatial_offset*1000)
     
     # Get gebco highest and lowest astronomical tide data
     gebco_data = ee.Dictionary(ee.Algorithms.If(bool_empty,
                                                 ee.Dictionary({'b1': 0, 'b2': 0}),
                                                 gebco_image.reduceRegion(reducer=ee.Reducer.mean(), geometry=station_buffer, scale=30)))
-
+    
+    # Get gtsm tidal stage percentage: (WL - LAT) / (HAT - LAT) * 100
+    def get_gtsm_tidal_stage_percentage(gtsm_feature, gebco_data):
+        wl = ee.Number(gtsm_feature.get('waterlevel'))
+        lat = ee.Number(gebco_data.get('b2'))
+        hat = ee.Number(gebco_data.get('b1'))
+        return wl.subtract(lat).divide(hat.subtract(lat)).multiply(100)
+    gtsm_tidal_stage_percentage = ee.Number(ee.Algorithms.If(bool_empty,
+                                                        None,
+                                                        get_gtsm_tidal_stage_percentage(gtsm_feature, gebco_data)))
     # Set gtsm en gebco data to image
     image = ee.Image(ee.Algorithms.If(bool_empty,
                                       image.set({'gtsm_gebco_data_isempty': True}),
                                       image.set({'gtsm_gebco_data_isempty': False,
-                                                 'gtsm_station': gtsm_col.first().get('station'),
-                                                 'gtsm_station_lon': gtsm_col.first().geometry().coordinates().get(0),
-                                                 'gtsm_station_lat': gtsm_col.first().geometry().coordinates().get(1),
-                                                 'gtsm_time': gtsm_col.first().get('times'),
-                                                 'gtsm_waterlevel': gtsm_col.first().get('waterlevel'),
+                                                 'gtsm_station': gtsm_feature.get('station'),
+                                                 'gtsm_station_lon': gtsm_feature.get('lon'),
+                                                 'gtsm_station_lat': gtsm_feature.get('lat'),
+                                                 'gtsm_time': gtsm_feature.get('times'),
+                                                 'gtsm_waterlevel': gtsm_feature.get('waterlevel'),
                                                  'gebco_hat': gebco_data.get('b1'),
-                                                 'gebco_lat': gebco_data.get('b2')})))
-
+                                                 'gebco_lat': gebco_data.get('b2'),
+                                                 'gtsm_tidal_stage_percentage': gtsm_tidal_stage_percentage})))
+    
     # Return image
     return image
 
@@ -182,7 +192,40 @@ print('{} s to add gtsm and gebco data to the first image'.format(np.round(time.
 # Add gtsm and gebco data to all images
 t0 = time.time()
 image_col2 = image_col.map(lambda image: add_gtsm_gebco_data_to_images(image, gtsm_col, gebco_image, tile))
-print('{} s to add gtsm and gebco data to alll images'.format(np.round(time.time()-t0, 2)))
+print('{} s to add gtsm and gebco data to all images'.format(np.round(time.time()-t0, 2)))
+
+# %%
+# Get high tide offset, low tide offset and tide spread
+def get_tide_offsets_and_spread(image_col):
+    ''' Get high tide offset, low tide offset and tide spread.
+
+    :param image_col: Image collection with gtsm and gebco data.
+    :type image_col: ee.ImageCollection
+    '''
+
+    # Filter images with gtsm and gebco data
+    image_col_ = image_col.filterMetadata('gtsm_gebco_data_isempty', 'equals', False)
+
+    # Get high tide offset
+    high_tide_offset = ee.Number(100).subtract(ee.Number(image_col_.reduceColumns(ee.Reducer.max(), ['gtsm_tidal_stage_percentage']).get('max')))
+
+    # Get low tide offset
+    low_tide_offset = ee.Number(image_col_.reduceColumns(ee.Reducer.min(), ['gtsm_tidal_stage_percentage']).get('min'))
+
+    # Get tide spread
+    tide_spread = high_tide_offset.subtract(low_tide_offset)
+
+    # Add high tide offset, low tide offset and tide spread to image collection properties
+    image_col = image_col.set({'high_tide_offset': high_tide_offset,
+                               'low_tide_offset': low_tide_offset,
+                               'tide_spread': tide_spread})
+    return image_col
+
+# Get high tide offset, low tide offset and tide spread
+image_col3 = get_tide_offsets_and_spread(image_col2)
+print('High tide offset: {:.2f} %'.format(image_col3.get('high_tide_offset').getInfo()))
+print('Low tide offset: {:.2f} %'.format(image_col3.get('low_tide_offset').getInfo()))
+print('Tide spread: {:.2f} %'.format(image_col3.get('tide_spread').getInfo()))
 
 # %%
 # Plot image
@@ -268,14 +311,16 @@ def get_gtsm_gebco_data_from_image(image):
                                                        'gtsm_time': None,
                                                        'gtsm_waterlevel': None,
                                                        'gebco_hat': None,
-                                                       'gebco_lat': None}),
+                                                       'gebco_lat': None,
+                                                       'gtsm_tidal_stage_percentage': None}),
                                           feature.set({'gtsm_station': image.get('gtsm_station'),
                                                        'gtsm_station_lon': image.get('gtsm_station_lon'),
                                                        'gtsm_station_lat': image.get('gtsm_station_lat'),
                                                        'gtsm_time': image.get('gtsm_time'),
                                                        'gtsm_waterlevel': image.get('gtsm_waterlevel'),
                                                        'gebco_hat': image.get('gebco_hat'),
-                                                       'gebco_lat': image.get('gebco_lat')})))
+                                                       'gebco_lat': image.get('gebco_lat'),
+                                                       'gtsm_tidal_stage_percentage': image.get('gtsm_tidal_stage_percentage')})))
     
     # Return feature
     return feature
@@ -283,20 +328,39 @@ def get_gtsm_gebco_data_from_image(image):
 # Get gtsm and gebco data from image
 print('Get data from image')
 gtsm_gebco_data = image_col2.map(lambda image: get_gtsm_gebco_data_from_image(image)).getInfo()
-image_idxs = list(range(len(gtsm_gebco_data['features'])))
-gtsm_waterlevels = [feature['properties']['gtsm_waterlevel'] for feature in gtsm_gebco_data['features']]
-gebco_hats = [feature['properties']['gebco_hat'] for feature in gtsm_gebco_data['features']]
-gebco_lats = [feature['properties']['gebco_lat'] for feature in gtsm_gebco_data['features']]
+image_idxs = np.arange(0, len(gtsm_gebco_data['features']))
+gtsm_waterlevels = np.array([feature['properties']['gtsm_waterlevel'] for feature in gtsm_gebco_data['features']])
+gebco_hats = np.array([feature['properties']['gebco_hat'] for feature in gtsm_gebco_data['features']])
+gebco_lats = np.array([feature['properties']['gebco_lat'] for feature in gtsm_gebco_data['features']])
+gtsm_tidal_stage_percentages = np.array([feature['properties']['gtsm_tidal_stage_percentage'] for feature in gtsm_gebco_data['features']])
 
 # %%
 # Plot gtsm waterlevels
-fig, ax = plt.subplots()
-ax.scatter(image_idxs, gtsm_waterlevels, color='blue', s=3, label='Gtsm water level')
-ax.plot(image_idxs, gebco_hats, color='red', linewidth=3, label='Gebco highest astronomical tide')
-ax.plot(image_idxs, gebco_lats, color='green', linewidth=3, label='Gebco lowest astronomical tide')
-ax.set_xlabel('Image index')
-ax.set_ylabel('Water level [m]')
-ax.legend(loc='lower center', bbox_to_anchor=(0.5, -0.35))
+fig, axs = plt.subplots(1, 2, figsize=(10, 5))
+axs[0].add_patch(plt.Rectangle((0, np.min(gtsm_waterlevels)), len(image_idxs), np.max(gtsm_waterlevels)-np.min(gtsm_waterlevels), color='blue', alpha=0.1))
+axs[0].scatter(image_idxs, gtsm_waterlevels, color='blue', s=3, label='Gtsm water level')
+axs[0].plot(image_idxs, gebco_lats, color='green', linewidth=3, label='Gebco lowest astronomical tide')
+axs[0].plot(image_idxs, gebco_hats, color='red', linewidth=3, label='Gebco highest astronomical tide')
+axs[0].set_xlim([np.min(image_idxs), np.max(image_idxs)])
+axs[0].set_ylim([np.floor(np.min(gebco_lats)), np.ceil(np.max(gebco_hats))])
+axs[0].set_xlabel('Image index')
+axs[0].set_ylabel('Water level [m MSL]')
+axs[0].set_title('Gtsm water level')
+axs[0].legend(loc='lower center', bbox_to_anchor=(0.5, -0.4))
+axs[0].grid()
+
+# Plot gtsm tidal stage percentage
+axs[1].add_patch(plt.Rectangle((0, np.min(gtsm_tidal_stage_percentages)), len(image_idxs), np.max(gtsm_tidal_stage_percentages)-np.min(gtsm_tidal_stage_percentages), color='blue', alpha=0.1))
+axs[1].scatter(image_idxs, gtsm_tidal_stage_percentages, color='blue', s=3, label='Gtsm tidal stage percentage')
+axs[1].set_xlim([np.min(image_idxs), np.max(image_idxs)])
+axs[1].set_ylim(0, 100)
+axs[1].set_xlabel('Image index')
+axs[1].set_ylabel('Tidal stage percentage [%]')
+axs[1].set_title('Gtsm tidal stage percentage')
+axs[1].legend(loc='lower center', bbox_to_anchor=(0.5, -0.4))
+axs[1].grid()
+
+fig.tight_layout()
 plt.show()
 
 # %%
