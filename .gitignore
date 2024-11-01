@@ -5,3 +5,5 @@ privatekey*
 .python-version
 **/output/*
 **/out_thumb/*
+*.tif
+*.geojson
