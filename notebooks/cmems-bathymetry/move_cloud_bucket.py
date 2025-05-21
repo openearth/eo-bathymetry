@@ -20,12 +20,18 @@ client = storage.Client()
 # os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = str(coclico_data_dir.joinpath("google_credentials.json"))
 
 # input params
-source_project = "bathymetry"
+# source_project = "bathymetry"
+source_project = "cmems-sdb-11209821-002"
 dest_project = "cmems-sdb-11209821-002"
-source_bucket_name = "cmems-sdb"
+# source_bucket_name = "cmems-sdb"
+source_bucket_name = "cmems-isdb"
 dest_bucket_name = "cmems-isdb"
-source_bucket_proj = "intertidal_improved_100m_global"
-dest_bucket_proj = "intertidal_improved_100m_global"
+# source_bucket_proj = "intertidal_improved_100m_global"
+source_bucket_proj = "intertidal_improved_100m_global/_meta"
+# dest_bucket_proj = "intertidal_improved_100m_global"
+dest_bucket_proj = "intertidal_improved_100m_global_meta"
+
+# NOTE, the below was run twice. First to migrate data & metadata from one cloud project to another. Then to correct the mistake on the _meta subfolder in the correct cloud project
 
 
 # function to move files from one bucket to another
