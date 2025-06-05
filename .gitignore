@@ -7,3 +7,4 @@ privatekey*
 **/out_thumb/*
 *.tif
 *.geojson
+.env
