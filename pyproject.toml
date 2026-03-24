@@ -1,0 +1,24 @@
+[project]
+name = "eo-bathymetry"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = ["gdal>=3.11.4", "resilientplotterclass"]
+
+[tool.uv.sources]
+gdal = [
+    { index = "gdal-wheels", marker = "sys_platform == 'linux'" },
+    { index = "geospatial_wheels", marker = "sys_platform == 'win32'" },
+]
+resilientplotterclass = { git = "https://github.com/Deltares-research/ResilientPlotterClass.git", rev = "main" }
+
+[[tool.uv.index]]
+name = "geospatial_wheels"
+url = "https://nathanjmcdougall.github.io/geospatial-wheels-index/"
+explicit = true
+
+[[tool.uv.index]]
+name = "gdal-wheels"
+url = "https://gitlab.com/api/v4/projects/61637378/packages/pypi/simple"
+explicit = true
